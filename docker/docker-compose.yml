@@ -27,9 +27,11 @@ services:
 
     ports:
       - "80:80"
+      - "443:443"
 
     volumes:
       - ../nginx/default.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
 
     depends_on:
       - frontend
