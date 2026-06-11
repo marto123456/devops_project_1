@@ -16,6 +16,8 @@ services:
   backend:
     build:
       context: ../backend
+    container_name: backend
+    restart: unless-stopped
     expose:
       - "5000"
     environment:
@@ -26,8 +28,8 @@ services:
       DB_USER: appuser
       DB_PASSWORD: ${POSTGRES_PASSWORD}
     depends_on:
-      - postgres:
-          condition: service_healthy
+      postgres:
+        condition: service_healthy
     networks: 
       - app-network
 
