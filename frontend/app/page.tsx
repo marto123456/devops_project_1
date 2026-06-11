@@ -7,7 +7,7 @@ export default async function Home() {
 
   return (
     <main>
-      <h1>Frontend (Next.js)</h1>
+      <h1>Frontend (Next.js) Test</h1>
       <p>Message from backend: {data.message}</p>
     </main>
   );
