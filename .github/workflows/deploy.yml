@@ -1,0 +1,42 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          # Optional: Protects against Man-in-the-Middle attacks if you have the fingerprint
+          fingerprint: ${{ secrets.VPS_SSH_FINGERPRINT }} 
+          script: |
+            set -e
+
+            # Navigate to project directory
+            cd ~/devops1
+
+            echo "Pulling latest code..."
+            # Note: Ensure your VPS has SSH key access to GitHub if this is a private repo
+            git pull origin main
+
+            echo "Building and starting containers..."
+            # Running from root ensures Docker context is correct
+            docker compose -f docker/docker-compose.yml up -d --build
+
+            echo "Cleaning up dangling images to save space..."
+            docker image prune -f
+
+            echo "Deployment completed successfully!"
+            docker ps
