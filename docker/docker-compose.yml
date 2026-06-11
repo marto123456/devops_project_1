@@ -19,12 +19,13 @@ services:
     expose:
       - "5000"
     environment:
-      - PORT=5000
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      PORT: 5000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: appdb
+      DB_USER: appuser
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
       - postgres:
           condition: service_healthy
     networks: 
