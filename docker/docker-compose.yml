@@ -84,6 +84,8 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
     # Do NOT expose port 9090 to the public internet for security. 
     # Nginx or Grafana will access it internally via app-network.
+    expose:
+      - "9090" # ◄ Changed from ports to expose! Safe from the internet.
     networks:
       - app-network
 
@@ -98,6 +100,8 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=ChangeThisToASecurePasswordMartins # Secure your admin panel
     volumes:
       - grafana_data:/var/lib/grafana # Ensures your dashboards persist if container restarts
+    expose:
+      - "3000" # ◄ Changed from ports to expose! Safe from the internet.
     networks:
       - app-network
 
