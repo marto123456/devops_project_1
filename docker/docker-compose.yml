@@ -94,8 +94,6 @@ services:
     image: grafana/grafana:11.0.0
     container_name: grafana
     restart: unless-stopped
-    ports:
-      - "3001:3000" # Maps port 3001 publicly so you can access it via browser
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=ChangeThisToASecurePasswordMartins # Secure your admin panel
