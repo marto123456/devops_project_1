@@ -4,8 +4,8 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 
-// 2. Import Prisma client wrapper and Prometheus tracking metrics
-const prisma = require("./lib/prisma");
+// 2. Import your original pg pool configuration and the metrics engine
+const pool = require("./config/db");
 const { client, httpRequestDuration } = require("./metrics");
 
 const app = express();
@@ -28,41 +28,46 @@ app.use((req, res, next) => {
     next();
 });
 
+// 4. Run your original raw SQL initialization migrations safely
+require("./init-db");
+
 // --- API Endpoints ---
 
 app.get("/api/hello", (req, res) => {
     res.json({
-        message: "Hello from Node.js backend with Prisma & Prometheus 🚀",
+        message: "Hello from Node.js backend with Raw SQL & Prometheus 🚀",
     });
 });
 
-// Create User (Upgraded to Prisma)
+// Create User (Pure raw SQL)
 app.post("/api/users", async (req, res) => {
     const { name, email } = req.body;
     try {
-        const newUser = await prisma.user.create({
-            data: {
-                name: name,
-                email: email,
-            },
-        });
-        res.json(newUser);
+        const result = await pool.query(
+            `
+            INSERT INTO users(name, email)
+            VALUES($1, $2)
+            RETURNING *
+            `,
+            [name, email]
+        );
+        res.json(result.rows[0]);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Get Users (Upgraded to Prisma)
+// Get Users (Pure raw SQL)
 app.get("/api/users", async (req, res) => {
     try {
-        const users = await prisma.user.findMany();
-        res.json(users);
+        const result = await pool.query("SELECT * FROM users");
+        res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// 4. EXPOSE THE METRICS ENDPOINT (For Prometheus Scraper Agent)
+// 5. EXPOSE THE METRICS ENDPOINT (For Prometheus Scraper Agent)
 app.get("/metrics", async (req, res) => {
     try {
         res.set("Content-Type", client.register.contentType);
@@ -73,7 +78,7 @@ app.get("/metrics", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
     console.log(`Backend running on port ${PORT}`);
     console.log(`Metrics dashboard available at http://localhost:${PORT}/metrics`);
 });
