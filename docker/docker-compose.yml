@@ -108,7 +108,6 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.49.1 # Secure production-stable tag
     container_name: cadvisor
     restart: unless-stopped
-    privileged: true # ◄ ADD THIS: Gives cAdvisor permission to read cgroup root
     devices:
       - /dev/kmsg # ◄ ADD THIS: Allows cAdvisor to inspect container kernel strings
     volumes:
@@ -117,7 +116,8 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /sys/fs/cgroup:/sys/fs/cgroup:ro # ◄ ADD THIS: Vital for modern Linux OS cgroup layout
+      # Fixes the Systemd vs Cgroup v2 naming conflict on modern Linux kernels:
+      - /sys/fs/cgroup/systemd:/sys/fs/cgroup/systemd:ro
     networks:
       - app-network
 
