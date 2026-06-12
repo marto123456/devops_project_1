@@ -74,6 +74,34 @@ services:
     networks:
       - app-network
 
+  prometheus:
+    image: prom/prometheus:v2.52.0 # Fixed production tag instead of latest
+    container_name: prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    # Do NOT expose port 9090 to the public internet for security. 
+    # Nginx or Grafana will access it internally via app-network.
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000" # Maps port 3001 publicly so you can access it via browser
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=ChangeThisToASecurePasswordMartins # Secure your admin panel
+    volumes:
+      - grafana_data:/var/lib/grafana # Ensures your dashboards persist if container restarts
+    networks:
+      - app-network
+
+      
 networks:
   app-network:
     driver: bridge
