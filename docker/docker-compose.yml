@@ -105,23 +105,25 @@ services:
       - app-network
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1 # Secure production-stable tag
+    image: gcr.io/cadvisor/cadvisor:v0.52.0
     container_name: cadvisor
     restart: unless-stopped
+    privileged: true
     devices:
-      - /dev/kmsg # ◄ ADD THIS: Allows cAdvisor to inspect container kernel strings
+      - /dev/kmsg
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
+      - /var/lib/docker:/var/lib/docker:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      # Fixes the Systemd vs Cgroup v2 naming conflict on modern Linux kernels:
-      - /sys/fs/cgroup/systemd:/sys/fs/cgroup/systemd:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    ports:
+      - "8080:8080"
     networks:
       - app-network
-
       
+          
 networks:
   app-network:
     driver: bridge
