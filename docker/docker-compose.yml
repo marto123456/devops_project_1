@@ -1,22 +1,161 @@
+# version: "3.9"
+
+# services:
+#   frontend:
+#     build:
+#       context: ../frontend
+#     expose:
+#       - "3000"
+#     depends_on:
+#       - backend
+#     environment:
+#       - NEXT_PUBLIC_API_URL=http://backend:5000
+#     networks:
+#       - app-network
+
+#   backend:
+#     build:
+#       context: ../backend
+#     container_name: backend
+#     restart: unless-stopped
+#     expose:
+#       - "5000"
+#     environment:
+#       PORT: 5000
+#       DB_HOST: postgres
+#       DB_PORT: 5432
+#       DB_NAME: ${POSTGRES_DB}
+#       DB_USER: ${POSTGRES_USER}
+#       DB_PASSWORD: ${POSTGRES_PASSWORD}
+#     depends_on:
+#       postgres:
+#         condition: service_healthy
+#     networks: 
+#       - app-network
+
+#   nginx:
+#     image: nginx:latest
+#     container_name: nginx
+
+#     ports:
+#       - "80:80"
+#       - "443:443"
+
+#     volumes:
+#       - ../nginx/default.conf:/etc/nginx/nginx.conf:ro
+#       - /etc/letsencrypt:/etc/letsencrypt:ro
+#       - /var/www/certbot:/var/www/certbot:ro
+
+#     depends_on:
+#       - frontend
+#       - backend
+
+#     networks:
+#       - app-network
+
+#   postgres:
+#     image: postgres:16
+
+#     container_name: postgres
+
+#     restart: unless-stopped
+
+#     environment:
+#       POSTGRES_DB: ${POSTGRES_DB}
+#       POSTGRES_USER: ${POSTGRES_USER}
+#       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+#     volumes:
+#       - postgres_data:/var/lib/postgresql/data
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+#       interval: 10s
+#       timeout: 5s
+#       retries: 5
+#     networks:
+#       - app-network
+
+#   prometheus:
+#     image: prom/prometheus:v2.52.0 # Fixed production tag instead of latest
+#     container_name: prometheus
+#     restart: unless-stopped
+#     volumes:
+#       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+#     command:
+#       - "--config.file=/etc/prometheus/prometheus.yml"
+#     # Do NOT expose port 9090 to the public internet for security. 
+#     # Nginx or Grafana will access it internally via app-network.
+#     expose:
+#       - "9090" # ◄ Changed from ports to expose! Safe from the internet.
+#     networks:
+#       - app-network
+
+#   grafana:
+#     image: grafana/grafana:11.0.0
+#     container_name: grafana
+#     restart: unless-stopped
+#     environment:
+#       - GF_SECURITY_ADMIN_USER=admin
+#       - GF_SECURITY_ADMIN_PASSWORD=ChangeThisToASecurePasswordMartins # Secure your admin panel
+#     volumes:
+#       - grafana_data:/var/lib/grafana # Ensures your dashboards persist if container restarts
+#     expose:
+#       - "3000" # ◄ Changed from ports to expose! Safe from the internet.
+#     networks:
+#       - app-network
+
+#   cadvisor:
+#     image: gcr.io/cadvisor/cadvisor:v0.52.0
+#     container_name: cadvisor
+#     restart: unless-stopped
+#     privileged: true
+#     devices:
+#       - /dev/kmsg
+#     volumes:
+#       - /:/rootfs:ro
+#       - /var/run:/var/run:ro
+#       - /sys:/sys:ro
+#       - /var/lib/docker:/var/lib/docker:ro
+#       - /var/run/docker.sock:/var/run/docker.sock:ro
+#       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+#       - /dev/disk/:/dev/disk:ro
+#     ports:
+#       - "8080:8080"
+#     networks:
+#       - app-network
+
+
+# networks:
+#   app-network:
+#     driver: bridge
+
+# volumes:
+#   postgres_data:
+#   grafana_data:
+
+
+
+
+
+
+
 version: "3.9"
 
 services:
   frontend:
-    build:
-      context: ../frontend
+    image: registry.noblehall.com/leperroquet-frontend:latest
+    restart: unless-stopped
     expose:
       - "3000"
     depends_on:
       - backend
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:5000
+      - NEXT_PUBLIC_API_URL=https://martins.noblehall.com/api
     networks:
       - app-network
 
   backend:
-    build:
-      context: ../backend
-    container_name: backend
+    image: registry.noblehall.com/leperroquet-backend:latest
     restart: unless-stopped
     expose:
       - "5000"
@@ -36,39 +175,32 @@ services:
   nginx:
     image: nginx:latest
     container_name: nginx
-
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
-
     volumes:
       - ../nginx/default.conf:/etc/nginx/nginx.conf:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
-
     depends_on:
       - frontend
       - backend
-
     networks:
       - app-network
 
   postgres:
     image: postgres:16
-
-    container_name: postgres
-
+    container_name: postgres # Locked; no rolling updates are applied to database stateful cores
     restart: unless-stopped
-
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -76,17 +208,15 @@ services:
       - app-network
 
   prometheus:
-    image: prom/prometheus:v2.52.0 # Fixed production tag instead of latest
+    image: prom/prometheus:v2.52.0
     container_name: prometheus
     restart: unless-stopped
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
-    # Do NOT expose port 9090 to the public internet for security. 
-    # Nginx or Grafana will access it internally via app-network.
     expose:
-      - "9090" # ◄ Changed from ports to expose! Safe from the internet.
+      - "9090"
     networks:
       - app-network
 
@@ -96,11 +226,11 @@ services:
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=ChangeThisToASecurePasswordMartins # Secure your admin panel
+      - GF_SECURITY_ADMIN_PASSWORD=ChangeThisToASecurePasswordMartins
     volumes:
-      - grafana_data:/var/lib/grafana # Ensures your dashboards persist if container restarts
+      - grafana_data:/var/lib/grafana
     expose:
-      - "3000" # ◄ Changed from ports to expose! Safe from the internet.
+      - "3000"
     networks:
       - app-network
 
@@ -123,7 +253,6 @@ services:
       - "8080:8080"
     networks:
       - app-network
-
 
 networks:
   app-network:

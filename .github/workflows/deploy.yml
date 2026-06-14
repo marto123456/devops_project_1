@@ -1,4 +1,57 @@
-name: Deploy
+# name: Deploy
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+
+#     steps: 
+#       - name: Checkout Repository
+#         uses: actions/checkout@v4
+
+#       - name: Deploy to VPS
+#         uses: appleboy/ssh-action@v1.2.0
+#         with:
+#           host: ${{ secrets.VPS_HOST }}
+#           username: ${{ secrets.VPS_USER }}
+#           key: ${{ secrets.VPS_SSH_KEY }}
+#           # Optional: Protects against Man-in-the-Middle attacks if you have the fingerprint
+#           fingerprint: ${{ secrets.VPS_SSH_FINGERPRINT }} 
+#           script: |
+#             set -e
+
+#             # Navigate to project directory
+#             cd ~/devops1
+
+#             echo "Pulling latest code..."
+#             # Note: Ensure your VPS has SSH key access to GitHub if this is a private repo
+#             git pull origin main
+
+#             echo "Building and starting containers..."
+#             # Running from root ensures Docker context is correct
+#             docker compose -f docker/docker-compose.yml up -d --build
+
+#             echo "Cleaning up dangling images to save space..."
+#             docker image prune -f
+
+#             echo "Deployment completed successfully!"
+#             docker ps
+
+
+
+
+
+
+
+
+
+
+
+name: Production Secure Pipeline
 
 on:
   push:
@@ -6,37 +59,74 @@ on:
       - main
 
 jobs:
-  deploy:
+  build-and-push:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Deploy to VPS
+      - name: Set up Docker Buildx Runner
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate with Custom Remote Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.noblehall.com
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      # Build Frontend in the Cloud using Multi-Stage Layers
+      - name: Build & Push Frontend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: registry.noblehall.com/leperroquet-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Build Backend in the Cloud using Multi-Stage Layers
+      - name: Build & Push Backend Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: registry.noblehall.com/leperroquet-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute Zero-Downtime Hot-Swaps on App VPS
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          # Optional: Protects against Man-in-the-Middle attacks if you have the fingerprint
-          fingerprint: ${{ secrets.VPS_SSH_FINGERPRINT }} 
           script: |
             set -e
-
-            # Navigate to project directory
             cd ~/devops1
 
-            echo "Pulling latest code..."
-            # Note: Ensure your VPS has SSH key access to GitHub if this is a private repo
+            echo "Synchronizing git manifests configuration files..."
             git pull origin main
 
-            echo "Building and starting containers..."
-            # Running from root ensures Docker context is correct
-            docker compose -f docker/docker-compose.yml up -d --build
+            echo "Authenticating App server Daemon into the Private Registry..."
+            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login registry.noblehall.com -u ${{ secrets.REGISTRY_USER }} --password-stdin
 
-            echo "Cleaning up dangling images to save space..."
+            echo "Pre-fetching cached production image layers..."
+            docker compose -f docker/docker-compose.yml pull frontend backend
+
+            echo "Executing Zero-Downtime Rolling Update for Backend Engine..."
+            docker rollout backend
+
+            echo "Executing Zero-Downtime Rolling Update for Frontend Panels..."
+            docker rollout frontend
+
+            echo "Cleaning up dangling layer cache..."
             docker image prune -f
-
-            echo "Deployment completed successfully!"
-            docker ps
+            
+            echo "Deployment fully completed without dropping user connections!"

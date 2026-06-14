@@ -9,6 +9,7 @@ export default async function Home() {
     <main>
       <h1>Frontend (Next.js) Test</h1>
       <p>Message from backend: {data.message}</p>
+      <p>TESTED MULTISTAGE BUILD</p>
     </main>
   );
 }
