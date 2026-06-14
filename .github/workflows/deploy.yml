@@ -121,10 +121,11 @@ jobs:
             docker compose -f docker/docker-compose.yml pull frontend backend
 
             echo "Executing Zero-Downtime Rolling Update for Backend Engine..."
-            docker rollout backend
+            docker rollout -f docker/docker-compose.yml backend
 
             echo "Executing Zero-Downtime Rolling Update for Frontend Panels..."
-            docker rollout frontend
+            
+            docker rollout -f docker/docker-compose.yml frontend
 
             echo "Cleaning up dangling layer cache..."
             docker image prune -f
