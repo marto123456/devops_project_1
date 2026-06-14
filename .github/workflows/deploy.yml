@@ -129,8 +129,5 @@ jobs:
 
             echo "Deployment complete"
             docker ps
-
-            echo "Cleaning up dangling layer cache..."
-            docker image prune -f
             
             echo "Deployment fully completed without dropping user connections!"
