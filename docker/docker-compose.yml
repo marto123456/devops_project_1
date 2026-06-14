@@ -144,6 +144,7 @@ version: "3.9"
 services:
   frontend:
     image: registry.noblehall.com/leperroquet-frontend:latest
+    container_name: frontend
     restart: unless-stopped
     expose:
       - "3000"
@@ -156,6 +157,7 @@ services:
 
   backend:
     image: registry.noblehall.com/leperroquet-backend:latest
+    container_name: backend
     restart: unless-stopped
     expose:
       - "5000"
