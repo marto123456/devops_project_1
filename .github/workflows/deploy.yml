@@ -117,15 +117,18 @@ jobs:
             echo "Authenticating App server Daemon into the Private Registry..."
             echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login registry.noblehall.com -u ${{ secrets.REGISTRY_USER }} --password-stdin
 
-            echo "Pre-fetching cached production image layers..."
-            docker compose -f docker/docker-compose.yml pull frontend backend
 
-            echo "Executing Zero-Downtime Rolling Update for Backend Engine..."
-            docker rollout -f docker/docker-compose.yml backend
+             echo "Pulling latest images..."
+            docker compose -f docker/docker-compose.yml pull
 
-            echo "Executing Zero-Downtime Rolling Update for Frontend Panels..."
-            
-            docker rollout -f docker/docker-compose.yml frontend
+            echo "Rebuilding & restarting safely..."
+            docker compose -f docker/docker-compose.yml up -d --build
+
+            echo "Cleaning up..."
+            docker image prune -f
+
+            echo "Deployment complete"
+            docker ps
 
             echo "Cleaning up dangling layer cache..."
             docker image prune -f
