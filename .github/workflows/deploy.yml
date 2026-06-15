@@ -51,7 +51,107 @@
 
 
 
-name: Production Secure Pipeline
+# name: Production Secure Pipeline
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   build-and-push:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@v4
+
+#       - name: Set up Docker Buildx Runner
+#         uses: docker/setup-buildx-action@v3
+
+#       - name: Authenticate with Custom Remote Registry
+#         uses: docker/login-action@v3
+#         with:
+#           registry: registry.noblehall.com
+#           username: ${{ secrets.REGISTRY_USER }}
+#           password: ${{ secrets.REGISTRY_PASSWORD }}
+
+#       # Build Frontend in the Cloud using Multi-Stage Layers
+#       - name: Build & Push Frontend Image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./frontend
+#           file: ./frontend/Dockerfile
+#           push: true
+#           tags: registry.noblehall.com/leperroquet-frontend:latest
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+
+#       # Build Backend in the Cloud using Multi-Stage Layers
+#       - name: Build & Push Backend Image
+#         uses: docker/build-push-action@v5
+#         with:
+#           context: ./backend
+#           file: ./backend/Dockerfile
+#           push: true
+#           tags: registry.noblehall.com/leperroquet-backend:latest
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
+
+#   deploy:
+#     needs: build-and-push
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Execute Zero-Downtime Hot-Swaps on App VPS
+#         uses: appleboy/ssh-action@v1.2.0
+#         with:
+#           host: ${{ secrets.VPS_HOST }}
+#           username: ${{ secrets.VPS_USER }}
+#           key: ${{ secrets.VPS_SSH_KEY }}
+#           script: |
+#             set -e
+#             cd ~/devops1
+
+#             echo "Synchronizing git manifests configuration files..."
+#             git pull origin main
+
+#             echo "Authenticating App server Daemon into the Private Registry..."
+#             echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login registry.noblehall.com -u ${{ secrets.REGISTRY_USER }} --password-stdin
+
+
+#              echo "Pulling latest images..."
+#             docker compose -f docker/docker-compose.yml pull
+
+#             echo "Rebuilding & restarting safely..."
+#             docker compose -f docker/docker-compose.yml up -d --build
+
+#             echo "Cleaning up..."
+#             docker image prune -f
+
+#             echo "Deployment complete"
+#             docker ps
+            
+#             echo "Deployment fully completed without dropping user connections!"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+name: Production DevSecOps Pipeline
 
 on:
   push:
@@ -59,75 +159,188 @@ on:
       - main
 
 jobs:
-  build-and-push:
+  security-gate:
+    name: Security Gate
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Docker Buildx Runner
+      ####################################################
+      # Secret Scanning
+      ####################################################
+      - name: Scan For Secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+
+      ####################################################
+      # Dockerfile Linting
+      ####################################################
+      - name: Lint Frontend Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+
+      - name: Lint Backend Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: backend/Dockerfile
+
+      ####################################################
+      # Dependency Auditing
+      ####################################################
+      - name: Frontend Dependency Audit
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --production --audit-level=high
+
+      - name: Backend Dependency Audit
+        working-directory: backend
+        run: |
+          npm ci
+          npm audit --production --audit-level=high
+
+      ####################################################
+      # Filesystem Scan
+      ####################################################
+      - name: Trivy Filesystem Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: 1
+
+  build-and-scan:
+    name: Build and Scan Containers
+    needs: security-gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Authenticate with Custom Remote Registry
+      ####################################################
+      # Frontend Build
+      ####################################################
+      - name: Build Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          load: true
+          tags: |
+            registry.noblehall.com/leperroquet-frontend:latest
+            registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
+
+      ####################################################
+      # Backend Build
+      ####################################################
+      - name: Build Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          load: true
+          tags: |
+            registry.noblehall.com/leperroquet-backend:latest
+            registry.noblehall.com/leperroquet-backend:${{ github.sha }}
+
+      ####################################################
+      # Image Scan
+      ####################################################
+      - name: Scan Frontend Image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Scan Backend Image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: registry.noblehall.com/leperroquet-backend:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+      ####################################################
+      # SBOM Generation
+      ####################################################
+      - name: Generate Frontend SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
+
+      - name: Generate Backend SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: registry.noblehall.com/leperroquet-backend:${{ github.sha }}
+
+      ####################################################
+      # Registry Login
+      ####################################################
+      - name: Login Registry
         uses: docker/login-action@v3
         with:
           registry: registry.noblehall.com
           username: ${{ secrets.REGISTRY_USER }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
-      # Build Frontend in the Cloud using Multi-Stage Layers
-      - name: Build & Push Frontend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: registry.noblehall.com/leperroquet-frontend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      ####################################################
+      # Push Images
+      ####################################################
+      - name: Push Images
+        run: |
+          docker push registry.noblehall.com/leperroquet-frontend:latest
+          docker push registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
 
-      # Build Backend in the Cloud using Multi-Stage Layers
-      - name: Build & Push Backend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: registry.noblehall.com/leperroquet-backend:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          docker push registry.noblehall.com/leperroquet-backend:latest
+          docker push registry.noblehall.com/leperroquet-backend:${{ github.sha }}
 
   deploy:
-    needs: build-and-push
+    name: Deploy To VPS
+    needs: build-and-scan
     runs-on: ubuntu-latest
+
     steps:
-      - name: Execute Zero-Downtime Hot-Swaps on App VPS
+      - name: Deploy
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+
           script: |
             set -e
+
             cd ~/devops1
 
-            echo "Synchronizing git manifests configuration files..."
+            echo "Updating repository..."
             git pull origin main
 
-            echo "Authenticating App server Daemon into the Private Registry..."
-            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login registry.noblehall.com -u ${{ secrets.REGISTRY_USER }} --password-stdin
+            echo "Login to registry..."
+            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login registry.noblehall.com \
+              -u "${{ secrets.REGISTRY_USER }}" \
+              --password-stdin
 
-
-             echo "Pulling latest images..."
+            echo "Pulling images..."
             docker compose -f docker/docker-compose.yml pull
 
-            echo "Rebuilding & restarting safely..."
-            docker compose -f docker/docker-compose.yml up -d --build
+            echo "Restarting services..."
+            docker compose -f docker/docker-compose.yml up -d
 
-            echo "Cleaning up..."
+            echo "Pruning images..."
             docker image prune -f
 
-            echo "Deployment complete"
-            docker ps
-            
-            echo "Deployment fully completed without dropping user connections!"
+            echo "Deployment completed."
