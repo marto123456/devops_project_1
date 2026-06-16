@@ -176,8 +176,16 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          
+
+      ####################################################
+      # Switch to this after first full github history scan to prevent noise from old commits
+      ####################################################
+      # - name: Scan For Secrets
+      #   uses: trufflesecurity/trufflehog@main
+      #   with:
+      #     base: ${{ github.event.before }}
+      #     head: ${{ github.sha }}
 
       ####################################################
       # Dockerfile Linting
