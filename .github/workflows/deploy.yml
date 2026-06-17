@@ -366,252 +366,257 @@
 name: Production DevSecOps Pipeline
 
 on:
-  push:
-    branches:
-      - main
+push:
+branches:
+- main
 
 jobs:
-  security-gate:
-    name: 🛡️ Security Gate
-    runs-on: ubuntu-latest
+security-gate:
+name: 🛡️ Security Gate
+runs-on: ubuntu-latest
+timeout-minutes: 20
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+```
+steps:
+  - name: Checkout Repository
+    uses: actions/checkout@v4
+    with:
+      fetch-depth: 0
 
-      ####################################################
-      # Secret Scanning
-      ####################################################
-      - name: Scan For Secrets
-        uses: trufflesecurity/trufflehog@main
-        with:
-          path: ./
+  ####################################################
+  # Secret Scanning
+  ####################################################
+  - name: Scan For Secrets
+    uses: trufflesecurity/trufflehog@main
+    with:
+      path: ./
 
-      ####################################################
-      # Use this after first full-history scan
-      ####################################################
-      # - name: Scan For Secrets
-      #   uses: trufflesecurity/trufflehog@main
-      #   with:
-      #     base: ${{ github.event.before }}
-      #     head: ${{ github.sha }}
+  ####################################################
+  # Use after initial full-history scan
+  ####################################################
+  # - name: Scan For Secrets
+  #   uses: trufflesecurity/trufflehog@main
+  #   with:
+  #     base: ${{ github.event.before }}
+  #     head: ${{ github.sha }}
 
-      ####################################################
-      # Dockerfile Linting
-      ####################################################
-      - name: Lint Frontend Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: frontend/Dockerfile
-          failure-threshold: error
+  ####################################################
+  # Dockerfile Linting
+  ####################################################
+  - name: Lint Frontend Dockerfile
+    uses: hadolint/hadolint-action@v3.1.0
+    with:
+      dockerfile: frontend/Dockerfile
+      failure-threshold: error
 
-      - name: Lint Backend Dockerfile
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: backend/Dockerfile
-          failure-threshold: error
+  - name: Lint Backend Dockerfile
+    uses: hadolint/hadolint-action@v3.1.0
+    with:
+      dockerfile: backend/Dockerfile
+      failure-threshold: error
 
-      ####################################################
-      # Frontend Dependency Audit
-      ####################################################
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+  ####################################################
+  # Node Setup + Cache
+  ####################################################
+  - name: Setup Node.js
+    uses: actions/setup-node@v4
+    with:
+      node-version: 22
+      cache: npm
+      cache-dependency-path: |
+        frontend/package-lock.json
+        backend/package-lock.json
 
-      - name: Frontend Dependency Audit
-        working-directory: frontend
-        run: |
-          npm ci
-          npm audit --omit=dev --audit-level=high
+  ####################################################
+  # Frontend Validation
+  ####################################################
+  - name: Frontend Security & Build Validation
+    working-directory: frontend
+    run: |
+      npm ci
+      npm audit --omit=dev --audit-level=high
+      npm run build
 
-      ####################################################
-      # Backend Dependency Audit
-      ####################################################
-      - name: Backend Dependency Audit
-        working-directory: backend
-        run: |
-          npm ci
-          npm audit --omit=dev --audit-level=high
+  ####################################################
+  # Backend Validation
+  ####################################################
+  - name: Backend Security & Validation
+    working-directory: backend
+    run: |
+      npm ci
+      npm audit --omit=dev --audit-level=high
+      npm test --if-present
 
-      ####################################################
-      # Build Validation
-      ####################################################
-      - name: Frontend Build Validation
-        working-directory: frontend
-        run: |
-          npm run build
+  ####################################################
+  # Trivy Filesystem Scan
+  ####################################################
+  - name: Trivy Frontend Filesystem Scan
+    uses: aquasecurity/trivy-action@master
+    with:
+      scan-type: fs
+      scan-ref: frontend
+      severity: HIGH,CRITICAL
+      exit-code: 1
 
-      - name: Backend Test Validation
-        working-directory: backend
-        run: |
-          npm test --if-present
+  - name: Trivy Backend Filesystem Scan
+    uses: aquasecurity/trivy-action@master
+    with:
+      scan-type: fs
+      scan-ref: backend
+      severity: HIGH,CRITICAL
+      exit-code: 1
+```
 
-      ####################################################
-      # Trivy Filesystem Scan
-      ####################################################
-      - name: Trivy Frontend Filesystem Scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: frontend
-          severity: HIGH,CRITICAL
-          exit-code: 1
+build-and-scan:
+name: 🐳 Build and Scan Containers
+needs: security-gate
+runs-on: ubuntu-latest
+timeout-minutes: 30
 
-      - name: Trivy Backend Filesystem Scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: backend
-          severity: HIGH,CRITICAL
-          exit-code: 1
+```
+steps:
+  - name: Checkout Repository
+    uses: actions/checkout@v4
 
-  build-and-scan:
-    name: 🐳 Build and Scan Containers
-    needs: security-gate
-    runs-on: ubuntu-latest
+  - name: Setup Docker Buildx
+    uses: docker/setup-buildx-action@v3
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+  ####################################################
+  # Build Frontend Image
+  ####################################################
+  - name: Build Frontend Image
+    uses: docker/build-push-action@v5
+    with:
+      context: ./frontend
+      file: ./frontend/Dockerfile
+      load: true
+      tags: |
+        registry.noblehall.com/leperroquet-frontend:latest
+        registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
+      cache-from: type=gha
+      cache-to: type=gha,mode=max
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+  ####################################################
+  # Build Backend Image
+  ####################################################
+  - name: Build Backend Image
+    uses: docker/build-push-action@v5
+    with:
+      context: ./backend
+      file: ./backend/Dockerfile
+      load: true
+      tags: |
+        registry.noblehall.com/leperroquet-backend:latest
+        registry.noblehall.com/leperroquet-backend:${{ github.sha }}
+      cache-from: type=gha
+      cache-to: type=gha,mode=max
 
-      ####################################################
-      # Build Frontend Image
-      ####################################################
-      - name: Build Frontend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          load: true
-          tags: |
-            registry.noblehall.com/leperroquet-frontend:latest
-            registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+  ####################################################
+  # Trivy Image Scan
+  ####################################################
+  - name: Scan Frontend Image
+    uses: aquasecurity/trivy-action@master
+    with:
+      scan-type: image
+      image-ref: registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
+      severity: HIGH,CRITICAL
+      ignore-unfixed: true
+      exit-code: 1
 
-      ####################################################
-      # Build Backend Image
-      ####################################################
-      - name: Build Backend Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          load: true
-          tags: |
-            registry.noblehall.com/leperroquet-backend:latest
-            registry.noblehall.com/leperroquet-backend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+  - name: Scan Backend Image
+    uses: aquasecurity/trivy-action@master
+    with:
+      scan-type: image
+      image-ref: registry.noblehall.com/leperroquet-backend:${{ github.sha }}
+      severity: HIGH,CRITICAL
+      ignore-unfixed: true
+      exit-code: 1
 
-      ####################################################
-      # Trivy Image Scan
-      ####################################################
-      - name: Scan Frontend Image
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: image
-          image-ref: registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
+  ####################################################
+  # SBOM Generation
+  ####################################################
+  - name: Generate Frontend SBOM
+    uses: anchore/sbom-action@v0
+    with:
+      image: registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
+      output-file: frontend-sbom.spdx.json
 
-      - name: Scan Backend Image
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: image
-          image-ref: registry.noblehall.com/leperroquet-backend:${{ github.sha }}
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
+  - name: Generate Backend SBOM
+    uses: anchore/sbom-action@v0
+    with:
+      image: registry.noblehall.com/leperroquet-backend:${{ github.sha }}
+      output-file: backend-sbom.spdx.json
 
-      ####################################################
-      # SBOM Generation
-      ####################################################
-      - name: Generate Frontend SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
-          output-file: frontend-sbom.spdx.json
+  ####################################################
+  # Upload SBOM Artifacts
+  ####################################################
+  - name: Upload SBOM Artifacts
+    uses: actions/upload-artifact@v4
+    with:
+      name: sbom-files
+      path: |
+        frontend-sbom.spdx.json
+        backend-sbom.spdx.json
 
-      - name: Generate Backend SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          image: registry.noblehall.com/leperroquet-backend:${{ github.sha }}
-          output-file: backend-sbom.spdx.json
+  ####################################################
+  # Registry Login
+  ####################################################
+  - name: Login Registry
+    uses: docker/login-action@v3
+    with:
+      registry: registry.noblehall.com
+      username: ${{ secrets.REGISTRY_USER }}
+      password: ${{ secrets.REGISTRY_PASSWORD }}
 
-      ####################################################
-      # Upload SBOM Artifacts
-      ####################################################
-      - name: Upload SBOM Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-files
-          path: |
-            frontend-sbom.spdx.json
-            backend-sbom.spdx.json
+  ####################################################
+  # Push Verified Images
+  ####################################################
+  - name: Push Images
+    run: |
+      docker push registry.noblehall.com/leperroquet-frontend:latest
+      docker push registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
 
-      ####################################################
-      # Registry Login
-      ####################################################
-      - name: Login Registry
-        uses: docker/login-action@v3
-        with:
-          registry: registry.noblehall.com
-          username: ${{ secrets.REGISTRY_USER }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+      docker push registry.noblehall.com/leperroquet-backend:latest
+      docker push registry.noblehall.com/leperroquet-backend:${{ github.sha }}
+```
 
-      ####################################################
-      # Push Verified Images
-      ####################################################
-      - name: Push Images
-        run: |
-          docker push registry.noblehall.com/leperroquet-frontend:latest
-          docker push registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
+deploy:
+name: 🚀 Deploy To VPS
+needs: build-and-scan
+runs-on: ubuntu-latest
+timeout-minutes: 10
 
-          docker push registry.noblehall.com/leperroquet-backend:latest
-          docker push registry.noblehall.com/leperroquet-backend:${{ github.sha }}
+```
+steps:
+  - name: Zero-Downtime Deployment
+    uses: appleboy/ssh-action@v1.2.0
+    with:
+      host: ${{ secrets.VPS_HOST }}
+      username: ${{ secrets.VPS_USER }}
+      key: ${{ secrets.VPS_SSH_KEY }}
+      script: |
+        set -e
 
-  deploy:
-    name: 🚀 Deploy To VPS
-    needs: build-and-scan
-    runs-on: ubuntu-latest
+        cd ~/devops1
 
-    steps:
-      - name: Zero-Downtime Deployment
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            set -e
+        echo "Updating repository..."
+        git pull origin main
 
-            cd ~/devops1
+        echo "Authenticating with registry..."
+        echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login registry.noblehall.com \
+          -u "${{ secrets.REGISTRY_USER }}" \
+          --password-stdin
 
-            echo "Updating repository..."
-            git pull origin main
+        echo "Pulling verified images..."
+        docker compose -f docker/docker-compose.yml pull
 
-            echo "Authenticating with registry..."
-            echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login registry.noblehall.com \
-              -u "${{ secrets.REGISTRY_USER }}" \
-              --password-stdin
+        echo "Updating running services..."
+        docker compose -f docker/docker-compose.yml up -d
 
-            echo "Pulling verified images..."
-            docker compose -f docker/docker-compose.yml pull
+        echo "Removing unused images..."
+        docker image prune -f
 
-            echo "Updating running services..."
-            docker compose -f docker/docker-compose.yml up -d
+        echo "Deployment completed successfully."
 
-            echo "Removing unused images..."
-            docker image prune -f
-
-            echo "Deployment completed successfully."
-
-            docker ps
+        docker ps
+```
