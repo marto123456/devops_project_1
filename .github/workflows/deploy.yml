@@ -376,7 +376,7 @@ name: 🛡️ Security Gate
 runs-on: ubuntu-latest
 timeout-minutes: 20
 
-```
+
 steps:
   - name: Checkout Repository
     uses: actions/checkout@v4
@@ -465,7 +465,7 @@ steps:
       scan-ref: backend
       severity: HIGH,CRITICAL
       exit-code: 1
-```
+
 
 build-and-scan:
 name: 🐳 Build and Scan Containers
@@ -473,7 +473,7 @@ needs: security-gate
 runs-on: ubuntu-latest
 timeout-minutes: 30
 
-```
+
 steps:
   - name: Checkout Repository
     uses: actions/checkout@v4
@@ -578,7 +578,7 @@ steps:
 
       docker push registry.noblehall.com/leperroquet-backend:latest
       docker push registry.noblehall.com/leperroquet-backend:${{ github.sha }}
-```
+
 
 deploy:
 name: 🚀 Deploy To VPS
@@ -586,7 +586,7 @@ needs: build-and-scan
 runs-on: ubuntu-latest
 timeout-minutes: 10
 
-```
+
 steps:
   - name: Zero-Downtime Deployment
     uses: appleboy/ssh-action@v1.2.0
@@ -619,4 +619,4 @@ steps:
         echo "Deployment completed successfully."
 
         docker ps
-```
+
