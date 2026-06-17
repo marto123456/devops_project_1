@@ -34,8 +34,16 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# 🛡️ FIX CRITICAL/HIGH OS Vulnerabilities
+RUN apk update && apk upgrade --no-cache
+
+# Bring in only clean prod dependencies and application source files
 COPY --from=deps /app/prod_node_modules ./node_modules
+COPY package*.json ./
 COPY . .
+
+# Delete local node_modules fallback if it was accidentally copied by the line above
+RUN rm -rf node_modules_development
 
 EXPOSE 5000
 CMD ["npm", "start"]

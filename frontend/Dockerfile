@@ -33,6 +33,9 @@ FROM node:22-alpine3.20 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# 🛡️ FIX CRITICAL/HIGH OS Vulnerabilities (libcrypto3, musl, zlib)
+RUN apk update && apk upgrade --no-cache
+
 # Copy only production necessities
 COPY --from=deps /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
