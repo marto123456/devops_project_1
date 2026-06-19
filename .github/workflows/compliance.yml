@@ -1,0 +1,31 @@
+name: Compliance And SBOM
+
+on:
+  workflow_call:
+
+jobs:
+  compliance:
+    name: 📋 Compliance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate Frontend SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: registry.noblehall.com/leperroquet-frontend:${{ github.sha }}
+          output-file: frontend-sbom.spdx.json
+
+      - name: Generate Backend SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: registry.noblehall.com/leperroquet-backend:${{ github.sha }}
+          output-file: backend-sbom.spdx.json
+
+      - name: Upload SBOM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-files-${{ github.sha }}
+          retention-days: 30
+          path: |
+            frontend-sbom.spdx.json
+            backend-sbom.spdx.json

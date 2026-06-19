@@ -1,0 +1,96 @@
+name: Security Checks
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  security-gate:
+    name: 🛡️ Security Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      ####################################################
+      # Secret Scanning
+      ####################################################
+      - name: Scan For Secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+
+      ####################################################
+      # Dockerfile Linting
+      ####################################################
+      - name: Lint Frontend Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+          failure-threshold: error
+
+      - name: Lint Backend Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: backend/Dockerfile
+          failure-threshold: error
+
+      ####################################################
+      # Node Setup + Cache
+      ####################################################
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      ####################################################
+      # Frontend Validation
+      ####################################################
+      - name: Frontend Security & Build Validation
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --omit=dev || true
+          npm run build
+
+      ####################################################
+      # Backend Validation
+      ####################################################
+      - name: Backend Security & Validation
+        working-directory: backend
+        run: |
+          npm ci
+          npm audit --omit=dev || true
+
+      ####################################################
+      # Trivy Filesystem Scan
+      ####################################################
+      - name: Trivy Frontend Filesystem Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: frontend
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+      - name: Trivy Backend Filesystem Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: backend
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
