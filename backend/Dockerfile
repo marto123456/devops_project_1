@@ -91,7 +91,7 @@ COPY --from=deps /app/prod_node_modules ./node_modules
 COPY package*.json ./
 
 # 🚀 Security Fix: Copy ONLY your backend source engine files, avoiding sweeping everything with COPY . .
-COPY ./src ./src
+COPY . .
 
 # 🔒 Hadolint Fix: Drop root privileges and switch execution to the built-in non-root user
 USER node
