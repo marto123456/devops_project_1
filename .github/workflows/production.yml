@@ -1,9 +1,61 @@
+# name: Production DevSecOps Pipeline
+
+# on:
+#   push:
+#     branches:
+#       - main
+
+# concurrency:
+#   group: production
+#   cancel-in-progress: true
+
+# jobs:
+#   security:
+#     uses: ./.github/workflows/security.yml
+
+#   build:
+#     needs: security
+#     uses: ./.github/workflows/build.yml
+#     secrets:
+#       REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+#       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+
+#   compliance:
+#     needs: build
+#     uses: ./.github/workflows/compliance.yml
+
+#   deploy:
+#     needs: compliance
+#     uses: ./.github/workflows/deploy.yml
+#     secrets:
+#       VPS_HOST: ${{ secrets.VPS_HOST }}
+#       VPS_USER: ${{ secrets.VPS_USER }}
+#       VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+#       REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+#       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+
+
+
+
+
+
+
+
+
 name: Production DevSecOps Pipeline
 
 on:
   push:
     branches:
       - main
+
+  # 🔄 FIX 1: Enable Manual Triggers via the GitHub UI
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for running manual deployment'
+        required: false
+        default: 'Redeploying the application to production'
 
 concurrency:
   group: production
@@ -26,6 +78,8 @@ jobs:
 
   deploy:
     needs: compliance
+    # ⏳ FIX 2: Bind this job to a protected environment
+    environment: production
     uses: ./.github/workflows/deploy.yml
     secrets:
       VPS_HOST: ${{ secrets.VPS_HOST }}
