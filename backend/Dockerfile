@@ -99,4 +99,4 @@ USER node
 EXPOSE 5000
 
 # ⚡ Performance Fix: Execute node engine directly to correctly handle kernel lifecycle signals
-CMD ["node", "start"]
+CMD ["node", "index"]
