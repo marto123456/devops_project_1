@@ -49,7 +49,7 @@ on:
     branches:
       - main
 
-  # 🔄 FIX 1: Enable Manual Triggers via the GitHub UI
+  # Manual trigger (Run workflow button)
   workflow_dispatch:
     inputs:
       reason:
@@ -62,9 +62,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 📌 Metadata job (captures trigger info + reason)
+  metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Capture deployment metadata
+        run: |
+          echo "===================================="
+          echo "🚀 Production Pipeline Triggered"
+          echo "Event: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "===================================="
+
+      - name: Write GitHub Summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Event: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Actor: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Reason: ${{ github.event.inputs.reason }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  # 🔐 Security stage
   security:
+    needs: metadata
     uses: ./.github/workflows/security.yml
 
+  # 🏗️ Build stage
   build:
     needs: security
     uses: ./.github/workflows/build.yml
@@ -72,10 +97,12 @@ jobs:
       REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
       REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
 
+  # 📋 Compliance stage
   compliance:
     needs: build
     uses: ./.github/workflows/compliance.yml
 
+  # 🚀 Deploy stage
   deploy:
     needs: compliance
     uses: ./.github/workflows/deploy.yml
