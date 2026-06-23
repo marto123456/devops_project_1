@@ -636,6 +636,8 @@ jobs:
   deploy:
     name: 🚀 Deploy To VPS
     runs-on: ubuntu-latest
+    environment:
+      name: production
     timeout-minutes: 10
 
     steps:

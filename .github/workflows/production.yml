@@ -78,8 +78,6 @@ jobs:
 
   deploy:
     needs: compliance
-    # ⏳ FIX 2: Bind this job to a protected environment
-    environment: production
     uses: ./.github/workflows/deploy.yml
     secrets:
       VPS_HOST: ${{ secrets.VPS_HOST }}
